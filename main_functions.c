@@ -11,8 +11,9 @@
 
 
 volatile uint8_t swap_flag = 0;
-volatile uint8_t byte1 = 0xAA;
-volatile uint8_t byte2 = 0x88;
+volatile uint8_t row = 0;
+volatile uint16_t highbytes = 0x8811;
+volatile uint16_t lowbytes = 0xffff;
 
 volatile char SCFG=0;    // flags for serial communication: BIT1 is UART RX in process,
 				// BIT2 is SPI TX in process
@@ -20,26 +21,31 @@ volatile char SCFG=0;    // flags for serial communication: BIT1 is UART RX in p
 
 void setup()
 {
-	WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
-	BCSCTL1 |= 15;								// SET RSELx to15
-	DCOCTL |= BIT5 + BIT6;						// SET DCOx to 3...should set DCO ~16Mhz
-	CCTL0 = CCIE;                             // CCR0 interrupt enabled
-	TACTL = TASSEL_2 + MC_1 + ID_3;           // SMCLK/8, upmode
-	CCR0 =  5000;                             //
-	//P1SEL |= BIT5 + BIT6;
-	P1DIR |= BIT0 + BIT5 + BIT6;              // P1.0 and P1.1 pins output, the rest are input
-	P1OUT &= 0x00;                        					// Shut. Down. Everything... :)
+	WDTCTL = WDTPW + WDTHOLD;                 				// Stop WDT
+	BCSCTL1 |= 15;											// SET RSELx to15
+	DCOCTL |= BIT5 + BIT6;									// SET DCOx to 3...should set DCO ~16Mhz...no oscilloscope. :(
+	CCTL0 = CCIE;                             				// CCR0 interrupt enabled
+	TACTL = TASSEL_2 + MC_1 + ID_0;           				// SMCLK no division, upmode
+	CCR0 =  5000;                             				// Assuming DCO is running at 16MHz, throws interrupt every 312uS, approx 3000Hz
+	P1DIR |= BIT0 + BIT1 + BIT2 + BIT3 + BIT4;              // P1.0 - P1.4 output
+	P1OUT &= 0x00;
 
 	// Setup SPI as master at SMCLK=DCO
 	USICTL0 |= USIPE6 + USIPE5 + USILSB + USIMST + USIOE; 	// Use pins 5 (sclk), 6 sdo, SPI master
-	//USICTL1 |= USIIE;                         			// Counter interrupt, flag remains set...I don't think I need interrupt for xmit only
+	USICNT |= USI16B;										// Select for transmission of 16bits in SPI
 	USICKCTL = USIDIV_0 + USISSEL_2;          				// /1 SMCLK
 	USICTL0 &= ~USISWRST;                     				// USI released for operation
 
 	USISR = 0;
-	USICNT = 8;                               				// init-load counter
+	USICNT = 16;                               				// init-load counter
 
 	_BIS_SR(GIE);                   			 // Enter LPM0 w/ interrupt
+}
+
+void rowselect(int curr_row)
+{
+	curr_row = curr_row << 1;					// Bitwise shift left, as Bit0 is used as latch (probably bad practice)...
+	P1OUT = curr_row;
 }
 	
 
@@ -50,44 +56,29 @@ void setup()
 #pragma vector=TIMERA0_VECTOR
 __interrupt void Timer_A (void)
 {
-	//uint8_t counter = 0;
+	rowselect(row);
+	if(row <= NUMROWS)
+	{row++;}
+	else
+	{row = 0;}								//
 
-	//while (counter < 2)
-	//{
 
-	//while ( ! ( USIIFG ) ) ;
-	//{
-	if(swap_flag == 0)
-		{USISR = byte1;}						// LOADS
-	else if(swap_flag ==1)
-		{USISR = byte2;}
-		USICNT = 8;							// SENDS
-		USISR = 0x00;
-	//}
-	//}
+	USISR = lowbytes;						// LOADS
+	USICNT |= USI16B + 16;								// SENDS
+	//__delay_cycles(50);
+	while ( ! (USIIFG & USICTL1) );			// Waits until lowbyte shifted in
+
+
+	USISR = highbytes;						// LOADS
+	USICNT |= USI16B + 17;					// SENDS.  Needs the extra bit or LED pattern is incorrect, off by 1!
+	//__delay_cycles(50);
+	while ( ! (USIIFG & USICTL1) );			// Waits until highbyte shifted in
+
 
 	 P1OUT |= BIT0;								// Pulses pin P1.0 TO latch in data to stp08dp05
 	 P1OUT &= ~BIT0;
 	 USICTL1 &= ~USIIFG;
 
-	 if(swap_flag == 0)
-	 {swap_flag = 1;}
-	 else
-	 {swap_flag = 0;}
-
 
 }
 
-/*
-// USI interrupt service routine
-#pragma vector=USI_VECTOR
-__interrupt void universal_serial_interface(void)
-{
-  P1OUT |= 0x02;                            // Disable TLC549
-  if (USISRL > 0x7F)
-    P1OUT |= 0x01;
-  else
-    P1OUT &= ~0x01;
-  P1OUT &= ~0x02;                            // Enable TLC549
-  USICNT = 8;                                // re-load counter
-}*/

@@ -11,24 +11,24 @@
                          } while (0)
 #define outputState(port, pin) ((port) & (1 << (pin)))
 
-#ifndef DATA
-#define DATA	PC0
+#ifndef A0
+#define A0		BIT1
 #endif
 
-#ifndef LATCH
-#define LATCH	PC1
+#ifndef A1
+#define A1		BIT2
 #endif
 
-#ifndef	CLOCK
-#define CLOCK	PC2
+#ifndef	A3
+#define A3		BIT3
 #endif
 
-#ifndef	OUTEN
-#define OUTEN	PC3
+#ifndef	LATCH
+#define LATCH	BIT0
 #endif
 
-#ifndef  STDP05_N
-#define STDP05_N	1
+#ifndef	NUMROWS
+#define NUMROWS		15			// REMEMBER, WE HAVE A ROW 0 (TOTAL ROWS 0-15)
 #endif
 
 

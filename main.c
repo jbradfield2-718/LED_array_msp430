@@ -2,7 +2,7 @@
 #include "stdint.h"
 #include "main_functions.h"
 
-extern volatile uint8_t byte;
+extern volatile uint8_t row;
 
 void main(void)
 {
@@ -10,6 +10,6 @@ void main(void)
 
 	for(;;){}
 
-  }                                  //Loop forever, we work with interrupts!
+  }
 
 
