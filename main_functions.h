@@ -1,3 +1,8 @@
+#include <msp430g2231.h>
+#include "stdint.h"
+
+
+extern void setup();
 
 #ifndef MAIN_FUNCTIONS_H_
 #define MAIN_FUNCTIONS_H_
@@ -28,7 +33,11 @@
 #endif
 
 #ifndef	NUMROWS
-#define NUMROWS		15			// REMEMBER, WE HAVE A ROW 0 (TOTAL ROWS 0-15)
+#define NUMROWS	15			// REMEMBER, WE HAVE A ROW 0 (TOTAL ROWS 0-15)
+#endif
+
+#ifndef	NUMCOLUMNS
+#define NUMCOLUMNS	31			// REMEMBER, WE HAVE A COLUMN 0 (TOTAL COLUMNS 0-31)
 #endif
 
 
