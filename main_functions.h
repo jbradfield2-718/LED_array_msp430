@@ -3,6 +3,8 @@
 
 
 extern void setup();
+extern void seed_array();
+extern void life();
 
 #ifndef MAIN_FUNCTIONS_H_
 #define MAIN_FUNCTIONS_H_

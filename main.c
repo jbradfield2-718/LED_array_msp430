@@ -2,13 +2,16 @@
 #include "stdint.h"
 #include "main_functions.h"
 
-extern volatile uint8_t row;
 
 void main(void)
 {
 	setup();
+	seed_array();
 
-	for(;;){}
+	for(;;)
+	{
+		life();
+	}
 
   }
 
