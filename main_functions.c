@@ -5,7 +5,8 @@
  *  Author: Turing
  */
 
-#include <msp430g2231.h>
+//#include <msp430.h>
+#include "msp430g2533.h"
 #include "stdint.h"
 #include <stdlib.h>
 #include "main_functions.h"
@@ -16,12 +17,15 @@ volatile int one_sec_flag = 0;
 volatile int swap_array_flag = 0;
 volatile uint8_t reset_game_flag = 0;
 volatile uint8_t row = 0;
-volatile uint16_t highbytes = 0x0000;
-volatile uint16_t lowbytes = 0x0000;
+
+volatile uint8_t lowbyte = 0x00;
+volatile uint8_t medlowbyte = 0x00;
+volatile uint8_t medhighbyte = 0x00;
+volatile uint8_t highbyte = 0x00;
 
 volatile uint32_t array[NUMROWS +1] =
 {
-		0x00000000, 0x00000000, 0x00000000, 0x00000000,
+		0xaaaaaaaa, 0xaaaaaaaa, 0x00000000, 0x00000000,
 		0x00000000, 0x00000000, 0x00000000, 0x00000000,
 		0x00000000, 0x00000000, 0x00000000, 0x00000000,
 		0x00000000, 0x00000000, 0x00000000, 0x00000000
@@ -49,18 +53,18 @@ void setup()
 	TACTL = TASSEL_2 + MC_1 + ID_0;           				// SMCLK no division, upmode
 	TACCR0 =  5000;                            				// Assuming DCO is running at 16MHz, throws interrupt every 312uS, approx 3000Hz, 16 rows to display update at < 180Hz
 
-
-	P1DIR |= BIT0 + BIT1 + BIT2 + BIT3 + BIT4;              // P1.0 - P1.4 output
-	P1OUT &= 0x00;
+	P1SEL = BIT2 + BIT4;
+	P1SEL2 = BIT2 + BIT4;
+	P2DIR = 0xFF;								              // Port B all output
+	P2OUT &= 0x00;
 
 	// Setup SPI as master at SMCLK=DCO
-	USICTL0 |= USIPE6 + USIPE5 + USILSB + USIMST + USIOE; 	// Use pins 5 (sclk), 6 sdo, SPI master
-	USICNT |= USI16B;										// Select for transmission of 16bits in SPI
-	USICKCTL = USIDIV_0 + USISSEL_2;          				// /1 SMCLK
-	USICTL0 &= ~USISWRST;                     				// USI released for operation
-
-	USISR = 0;
-	USICNT = 16;                               				// init-load counter
+	UCA0CTL0 |= UCCKPL + UCMST + UCSYNC;  					// 3-pin, 8-bit SPI master
+	UCA0CTL1 |= UCSSEL_2;										// SMCLK as USI source
+	UCA0BR0 |= 0x02;                          // /2
+	UCA0BR1 = 0;                              //
+	UCA0MCTL = 0;
+	UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
 	_BIS_SR(GIE);                   			 // Enter LPM0 w/ interrupt
 }
@@ -68,7 +72,7 @@ void setup()
 void rowselect(int curr_row)
 {
 	curr_row = curr_row << 1;					// Bitwise shift left, as Bit0 is used as latch (probably bad practice)...
-	P1OUT = curr_row;
+	P2OUT = curr_row;
 }
 
 
@@ -311,11 +315,12 @@ void update_array()
 	life();
 }
 
+
 // Timer A0 interrupt service routine
-#pragma vector=TIMERA0_VECTOR
+#pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A (void)
 {
-	one_sec_flag++;
+/*	one_sec_flag++;
 		if(one_sec_flag >= 3200)
 		{
 			one_sec_flag = 0;
@@ -327,34 +332,50 @@ __interrupt void Timer_A (void)
 	{row++;}
 	else
 	{row = 0;}
-	uint8_t i, tmp;
+
+*/
+	rowselect(5);						// Testing Only...
+	uint8_t i, tmp2, tmp3;
+	uint32_t tmp1;
+
 
 
 	// This for loop extracts the lowbytes...note that i is an int, numcolumns = 31, numcolumns/2 = 15 (int truncates to 15)
-	for(i=0; i<=NUMCOLUMNS/2; i++)
+	for(i=0; i<=NUMCOLUMNS; i++)
 	{
-		tmp = array[row] &= 1 << i;		// Bitwise and shift by i columns to extract bit from array in tmp
-		lowbytes |= tmp << i;			// Bitwise OR to load it into char to SPI
+		tmp1 =  array[row];		// Bitwise and shift by i columns to extract bit from array in tmp
+		tmp2 = 1 << i;
+		tmp3 = tmp1 & tmp2;
+
+		if(i<4)
+			{lowbyte |= tmp3;}				// Bitwise OR to load it into char to SPI
+		else if(i>=4 && i<8)
+			{tmp3 = tmp3 >> 4;				// Bitwise shift right to
+			medlowbyte |= tmp3;}
+		else if(i>=8 && i<12)
+			{tmp3 = tmp3 >> 8;
+			medhighbyte |= tmp3;}
+		else if(i>=12 && i<16)
+			{tmp3 = tmp3 >> 12;
+			highbyte |= tmp3;}
+
+		tmp1 = 0; tmp2 = 0; tmp3 = 0;							// clears temp variable to prevent possible overwrite errors.
 	}
-	// This for loop extracts the highbytes...note that i is an int, numcolumns = 31, numcolumns/2 = 15 (int truncates to 15)
-	for(i=0; i<=NUMCOLUMNS/2; i++)
-	{
-		tmp = array[row] &= 1 << i;		// Bitwise and shift by i columns to extract bit from array in tmp
-		highbytes |= tmp << i;			// Bitwise OR to load it into char to SPI
-	}
 
+	UCA0TXBUF = lowbyte;
+	while (!(IFG2 & UCA0TXIFG));						// Waits until lowbyte shifted in
 
-	USISR = lowbytes;						// LOADS 16bits
-	USICNT |= USI16B + 16;					// SENDS 16bits
-	while ( ! (USIIFG & USICTL1) );			// Waits until lowbyte shifted in
+	UCA0TXBUF = medlowbyte;
+	while (!(IFG2 & UCA0TXIFG));
 
-	USISR = highbytes;						// LOADS
-	USICNT |= USI16B + 17;					// SENDS.  Needs the extra bit or LED pattern is incorrect, off by 1!
-	while ( ! (USIIFG & USICTL1) );			// Waits until highbyte shifted in
+	UCA0TXBUF = medhighbyte;
+	while (!(IFG2 & UCA0TXIFG));
 
-	 P1OUT |= BIT0;								// Pulses pin P1.0 TO latch in data to stp08dp05
-	 P1OUT &= ~BIT0;
-	 USICTL1 &= ~USIIFG;
+	UCA0TXBUF = highbyte;
+	while (!(IFG2 & UCA0TXIFG));
+
+	 P2OUT |= BIT0;								// Pulses pin P2.0 TO latch in data to stp08dp05
+	 P2OUT &= ~BIT0;
 
 
 }
