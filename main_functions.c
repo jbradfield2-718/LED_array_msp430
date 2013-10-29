@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include "main_functions.h"
 #include "string.h"
+#include "math.h"
 
 
 volatile int one_sec_flag = 0;
@@ -25,7 +26,7 @@ volatile uint8_t highbyte = 0x00;
 
 volatile uint32_t array[NUMROWS +1] =
 {
-		0xaaaaaaaa, 0xaaaaaaaa, 0x00000000, 0x00000000,
+		0x00000000, 0x00000000, 0x00000000, 0x00000000,
 		0x00000000, 0x00000000, 0x00000000, 0x00000000,
 		0x00000000, 0x00000000, 0x00000000, 0x00000000,
 		0x00000000, 0x00000000, 0x00000000, 0x00000000
@@ -89,7 +90,7 @@ void swap_array()
 
 void seed_array()
 {
-	srand(TAR);									// Seeds random numbers from Timer 0.
+	srand(TA0R);									// Seeds random numbers from Timer 0.
 	uint8_t x, y;								// y variable represents current column, x-->row
 	for (y = 0; y <= NUMCOLUMNS; y++)			// Creates the random initial state of the array with 1s and 0s.
 		{
@@ -315,12 +316,29 @@ void update_array()
 	life();
 }
 
+int power(num, exponent)
+{
+	if (exponent == 0)
+	{return 1;}
+	if (exponent == 1)
+	{return num;}
+
+	int ans;
+	ans = num;
+
+	do{
+	ans = ans*num;
+	exponent--;
+	}
+	while(exponent > 1);
+	return ans;
+}
 
 // Timer A0 interrupt service routine
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A (void)
 {
-/*	one_sec_flag++;
+	one_sec_flag++;
 		if(one_sec_flag >= 3200)
 		{
 			one_sec_flag = 0;
@@ -333,33 +351,38 @@ __interrupt void Timer_A (void)
 	else
 	{row = 0;}
 
-*/
-	rowselect(5);						// Testing Only...
-	uint8_t i, tmp2, tmp3;
-	uint32_t tmp1;
 
+	uint8_t i;
+	volatile unsigned long tmp1;
 
+	lowbyte = 0xFF;
+	medlowbyte = 0xFF;
+	medhighbyte = 0xFF;
+	highbyte = 0xFF;
 
 	// This for loop extracts the lowbytes...note that i is an int, numcolumns = 31, numcolumns/2 = 15 (int truncates to 15)
-	for(i=0; i<=NUMCOLUMNS; i++)
+	for(i=0; i<4; i++)
 	{
 		tmp1 =  array[row];		// Bitwise and shift by i columns to extract bit from array in tmp
-		tmp2 = 1 << i;
-		tmp3 = tmp1 & tmp2;
 
-		if(i<4)
-			{lowbyte |= tmp3;}				// Bitwise OR to load it into char to SPI
-		else if(i>=4 && i<8)
-			{tmp3 = tmp3 >> 4;				// Bitwise shift right to
-			medlowbyte |= tmp3;}
-		else if(i>=8 && i<12)
-			{tmp3 = tmp3 >> 8;
-			medhighbyte |= tmp3;}
-		else if(i>=12 && i<16)
-			{tmp3 = tmp3 >> 12;
-			highbyte |= tmp3;}
-
-		tmp1 = 0; tmp2 = 0; tmp3 = 0;							// clears temp variable to prevent possible overwrite errors.
+		switch(i)
+		{
+		case(0):
+				lowbyte = lowbyte &= tmp1;
+				break;
+		case(1):
+				tmp1 = tmp1 >> 8;
+				medlowbyte = medlowbyte &= tmp1;
+				break;
+		case(2):
+				tmp1 = tmp1 >> 16;
+				medhighbyte = medhighbyte &= tmp1;
+				break;
+		case(3):
+				tmp1 = tmp1 >> 24;
+				highbyte = highbyte &= tmp1;
+				break;
+		}
 	}
 
 	UCA0TXBUF = lowbyte;
