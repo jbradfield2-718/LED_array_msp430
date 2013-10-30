@@ -35,6 +35,10 @@ extern void life();
 #define LATCH	BIT0
 #endif
 
+#ifndef	CLEAR
+#define CLEAR	BIT5
+#endif
+
 #ifndef	NUMROWS
 #define NUMROWS	15			// REMEMBER, WE HAVE A ROW 0 (TOTAL ROWS 0-15)
 #endif

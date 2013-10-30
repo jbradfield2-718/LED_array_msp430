@@ -57,7 +57,7 @@ void setup()
 	P1SEL = BIT2 + BIT4;
 	P1SEL2 = BIT2 + BIT4;
 	P2DIR = 0xFF;								              // Port B all output
-	P2OUT &= 0x00;
+	P2OUT &= 0x00;												// All pins port B 0
 
 	// Setup SPI as master at SMCLK=DCO
 	UCA0CTL0 |= UCCKPL + UCMST + UCSYNC;  					// 3-pin, 8-bit SPI master
@@ -116,24 +116,58 @@ void reset_game()
 	reset_game_flag = 0;
 }
 
+uint8_t return_bit(unsigned long int bit)
+{
+	if (bit != 0)
+		{return 1;}
+	else
+		return 0;
+}
+
 // Works with life subroutine to calculate the number of neighbors each cell has in the current array.  Note that this is modification of original code which used full array of uint8_t ints
 // 32 x 16 = 512 byte for each array...too large to load program in RAM.  Reduced to array of uint32_t x 16 rows...now 64 byte each 8 fold reduction in memory space allocated but needs cumbersome
 // bitwise operations to extract individual bits from the array of uint32_t
 uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 {
-	uint8_t num_of_neighbors, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8;
+	uint32_t tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8;
+	uint8_t num_of_neighbors;
 	// Calc boundry conditions first...the four vertices of the array
 	// Lower Right
-	if(current_row == 0 && current_column == 0)
+	if(current_row == 0 && current_column == 0)							/// Problem within subroutine is causing array to be overwritten....
 	{
-		tmp1 = array[current_row] &= 1L << (current_column +1);
-		tmp2 = array[current_row] &= 1L << (NUMCOLUMNS-1);
-		tmp3 = array[current_row+1] &= 1L << (NUMCOLUMNS-1);
-		tmp4 = array[current_row+1] &= 1L << (current_column+1);
-		tmp5 = array[current_row+1] &= 1L << (current_column);
-		tmp6 = array[NUMROWS-1] &= 1L << (current_column);
-		tmp7 = array[NUMROWS-1] &= 1L << (current_column+1);
-		tmp8 = array[NUMROWS-1] &= 1L << (NUMCOLUMNS-1);
+		tmp1 = array[current_row];
+		tmp1 = tmp1 &= 1L << (current_column +1);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row];
+		tmp2 = tmp2 &= 1L << (NUMCOLUMNS-1);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row+1];
+		tmp3 = tmp3 &= 1L << (NUMCOLUMNS-1);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[current_row+1];
+		tmp4 = tmp4 &= 1L << (current_column+1);
+		tmp4 = return_bit(tmp4);
+
+		tmp5 = array[current_row+1];
+		tmp5 = tmp5 &= 1L << (current_column);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[NUMROWS-1];
+		tmp6 = tmp6 &= 1L << (current_column);
+		tmp6 = return_bit(tmp6);
+
+		tmp7 = array[NUMROWS-1];
+		tmp7 = tmp7 &= 1L << (current_column+1);
+		tmp7 = return_bit(tmp7);
+
+		tmp8 = array[NUMROWS-1];
+		tmp8 = tmp8 &= 1L << (NUMCOLUMNS-1);
+		tmp8 = return_bit(tmp8);
+
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
@@ -345,12 +379,6 @@ __interrupt void Timer_A (void)
 			swap_array();
 		}
 
-	rowselect(row);
-	if(row <= NUMROWS)
-	{row++;}
-	else
-	{row = 0;}
-
 
 	uint8_t i;
 	volatile unsigned long tmp1;
@@ -385,8 +413,12 @@ __interrupt void Timer_A (void)
 		}
 	}
 
+	// Now we select row and display data...
+
+	P2OUT |= BIT5;								// sets output enable high to stop display of line when changing data
+
 	UCA0TXBUF = lowbyte;
-	while (!(IFG2 & UCA0TXIFG));						// Waits until lowbyte shifted in
+	while (!(IFG2 & UCA0TXIFG));						// Sends data out to STDP05 LED Drivers...
 
 	UCA0TXBUF = medlowbyte;
 	while (!(IFG2 & UCA0TXIFG));
@@ -397,10 +429,17 @@ __interrupt void Timer_A (void)
 	UCA0TXBUF = highbyte;
 	while (!(IFG2 & UCA0TXIFG));
 
+
+	 rowselect(row);
+	 if(row <= NUMROWS)
+	 	{row++;}
+	 else
+	 	{row = 0;}
+
 	 P2OUT |= BIT0;								// Pulses pin P2.0 TO latch in data to stp08dp05
 	 P2OUT &= ~BIT0;
 
-
+	 P2OUT &= ~BIT5;							// Resets Bit5 low to turn line back on
 }
 
 
