@@ -47,7 +47,7 @@ void setup()
 	// Setup DCO Freq...used as input to timers A and B
 	WDTCTL = WDTPW + WDTHOLD;                 				// Stop WDT
 	BCSCTL1 |= 15;											// SET RSELx to15
-	DCOCTL |= BIT5 + BIT6;									// SET DCOx to 3...should set DCO ~16Mhz...no oscilloscope. :(
+	DCOCTL |= BIT5 + BIT6 + BIT7;									// SET DCOx to 7...should set DCO ~16Mhz--26MHz...no oscilloscope. :(
 
 	// Timer A setup count up compare interrupts @ high speed for write data to array
 	TACCTL0 = CCIE;                             			// Timer A CCR0 interrupt enabled
@@ -62,8 +62,8 @@ void setup()
 	// Setup SPI as master at SMCLK=DCO
 	UCA0CTL0 |= UCCKPL + UCMST + UCSYNC;  					// 3-pin, 8-bit SPI master
 	UCA0CTL1 |= UCSSEL_2;										// SMCLK as USI source
-	UCA0BR0 |= 0x02;                          // /2
-	UCA0BR1 = 0;                              //
+	//UCA0BR0 |= 0x02;                          // /2
+	//UCA0BR1 = 0;                              //
 	UCA0MCTL = 0;
 	UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
@@ -91,18 +91,18 @@ void swap_array()
 void seed_array()
 {
 	srand(TA0R);									// Seeds random numbers from Timer 0.
-	uint8_t x, y;								// y variable represents current column, x-->row
+	volatile long int x, y;								// y variable represents current column, x-->row
 	for (y = 0; y <= NUMCOLUMNS; y++)			// Creates the random initial state of the array with 1s and 0s.
 		{
 			for (x = 0; x <= NUMROWS; x++)
 			{
 				if(rand() % 2 == 0)
 				{
-					array[x] |= 1 << y;			// Sets bit in array
+					array[x] |= 1L << y;			// Sets bit in array
 				}
 				else
 				{
-					array[x] &= ~(1 << y);		// resets bit in array
+					array[x] &= ~(1L << y);		// resets bit in array
 				}
 			}
 		}
@@ -129,7 +129,7 @@ uint8_t return_bit(unsigned long int bit)
 // bitwise operations to extract individual bits from the array of uint32_t
 uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 {
-	uint32_t tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8;
+	volatile uint32_t tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8;
 	uint8_t num_of_neighbors;
 	// Calc boundry conditions first...the four vertices of the array
 	// Lower Right
@@ -174,42 +174,118 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 	// Lower Left
 	if(current_row == 0 && current_column == NUMCOLUMNS-1)
 	{
-		tmp1 = array[current_row] &= 1L << (current_column -1);
-		tmp2 = array[current_row+1] &= 1L << (current_column);
-		tmp3 = array[current_row+1] &= 1L << (current_column-1);
-		tmp4 = array[current_row] &= 1L << (0);
-		tmp5 = array[current_row+1] &= 1L << (0);
-		tmp6 = array[NUMROWS-1] &= 1L << (current_column);
-		tmp7 = array[NUMROWS-1] &= 1L << (current_column-1);
-		tmp8 = array[NUMROWS-1] &= 1L << (0);
+		tmp1 = array[current_row];
+		tmp1 = tmp1 &= 1L << (current_column -1);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row+1];
+		tmp2 = tmp2 &= 1L << (current_column);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row+1];
+		tmp3 = tmp3 &= 1L << (current_column-1);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[current_row];
+		tmp4 = tmp4 &= 1L << (0);
+		tmp4 = return_bit(tmp4);
+
+
+		tmp5 = array[current_row+1];
+		tmp5 = tmp5 &= 1L << (0);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[NUMROWS-1];
+		tmp6 = tmp6 &= 1L << (current_column);
+		tmp6 = return_bit(tmp6);
+
+
+		tmp7 = array[NUMROWS-1];
+		tmp7 = tmp7 &= 1L << (current_column-1);
+		tmp7 = return_bit(tmp7);
+
+
+		tmp8 = array[NUMROWS-1];
+		tmp8 = tmp8 &= 1L << (0);
+		tmp8 = return_bit(tmp8);
+
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
 	//upper right
 	if(current_row == NUMROWS-1 && current_column == 0)
 	{
-		tmp1 = array[current_row] &= 1L << (current_column +1);
-		tmp2 = array[current_row-1] &= 1L << (current_column-1);
-		tmp3 = array[current_row-1] &= 1L << (current_column);
-		tmp4 = array[current_row] &= 1L << (NUMCOLUMNS-1);
-		tmp5 = array[current_row-1] &= 1L << (NUMCOLUMNS-1);
-		tmp6 = array[0] &= 1L << (current_column);
-		tmp7 = array[0] &= 1L << (current_column+1);
-		tmp8 = array[0] &= 1L << (NUMCOLUMNS-1);
+		tmp1 = array[current_row];
+		tmp1 = tmp1 &= 1L << (current_column +1);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row-1];
+		tmp2 = tmp2 &= 1L << (current_column-1);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row-1];
+		tmp3 = tmp3 &= 1L << (current_column);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[current_row];
+		tmp4 = tmp4 &= 1L << (NUMCOLUMNS-1);
+		tmp4 = return_bit(tmp4);
+
+		tmp5 = array[current_row-1];
+		tmp5 = tmp5 &= 1L << (NUMCOLUMNS-1);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[0];
+		tmp6 = tmp6 &= 1L << (current_column);
+		tmp6 = return_bit(tmp6);
+
+		tmp7 = array[0];
+		tmp7 = tmp7 &= 1L << (current_column+1);
+		tmp7 = return_bit(tmp7);
+
+		tmp8 = array[0];
+		tmp8 = tmp8 &= 1L << (NUMCOLUMNS-1);
+		tmp8 = return_bit(tmp8);
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
 	//upper left
 	if(current_row == NUMROWS-1 && current_column == NUMCOLUMNS-1)
 	{
-		tmp1 = array[current_row] &= 1L << (current_column -1);
-		tmp2 = array[current_row-1] &= 1L << (current_column-1);
-		tmp3 = array[current_row-1] &= 1L << (current_column);
-		tmp4 = array[0] &= 1L << (current_column);
-		tmp5 = array[0] &= 1L << (current_column-1);
-		tmp6 = array[current_row] &= 1L << (0);
-		tmp7 = array[current_row-1] &= 1L << (0);
-		tmp8 = array[0] &= 1L << (0);
+		tmp1 = array[current_row];
+		tmp1 = tmp1 &= 1L << (current_column -1);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row-1];
+		tmp2 = tmp2 &= 1L << (current_column-1);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row-1];
+		tmp3 = tmp3 &= 1L << (current_column);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[0];
+		tmp4 = tmp4 &= 1L << (current_column);
+		tmp4 = return_bit(tmp4);
+
+		tmp5 = array[0];
+		tmp5 = tmp5 &= 1L << (current_column-1);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[current_row];
+		tmp6 = tmp6 &= 1L << (0);
+		tmp6 = return_bit(tmp6);
+
+		tmp7 = array[current_row-1];
+		tmp7 = tmp7 &= 1L << (0);
+		tmp7 = return_bit(tmp7);
+
+		tmp8 = array[0];
+		tmp8 = tmp8 &= 1L << (0);
+		tmp8 = return_bit(tmp8);
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
@@ -218,77 +294,198 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 	//Bottom edge
 	if(current_row == 0)
 	{
-		tmp1 = array[current_row] &= 1L << (current_column +1);
-		tmp2 = array[current_row+1] &= 1L << (current_column+1);
-		tmp3 = array[current_row+1] &= 1L << (current_column);
-		tmp4 = array[current_row+1] &= 1L << (current_column-1);
-		tmp5 = array[current_row] &= 1L << (current_column-1);
-		tmp6 = array[NUMROWS-1] &= 1L << (current_column+1);
-		tmp7 = array[NUMROWS-1] &= 1L << (current_column);
-		tmp8 = array[NUMROWS-1] &= 1L << (current_column-1);
+		tmp1 = array[current_row];
+		tmp1 = tmp1 &= 1L << (current_column +1);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row+1];
+		tmp2 = tmp2 &= 1L << (current_column+1);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row+1];
+		tmp3 = tmp3 &= 1L << (current_column);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[current_row+1];
+		tmp4 = tmp4 &= 1L << (current_column-1);
+		tmp4 = return_bit(tmp4);
+
+		tmp5 = array[current_row];
+		tmp5 = tmp5 &= 1L << (current_column-1);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[NUMROWS-1];
+		tmp6 = tmp6 &= 1L << (current_column+1);
+		tmp6 = return_bit(tmp6);
+
+		tmp7 = array[NUMROWS-1];
+		tmp7 = tmp7 &= 1L << (current_column);
+		tmp7 = return_bit(tmp7);
+
+		tmp8 = array[NUMROWS-1];
+		tmp8 = tmp8 &= 1L << (current_column-1);
+		tmp8 = return_bit(tmp8);
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
 	//Top edge
 	if(current_row == NUMROWS-1)
 	{
-		tmp1 = array[current_row] &= 1L << (current_column +1);
-		tmp2 = array[current_row-1] &= 1L << (current_column+1);
-		tmp3 = array[current_row-1] &= 1L << (current_column);
-		tmp4 = array[current_row-1] &= 1L << (current_column-1);
-		tmp5 = array[current_row] &= 1L << (current_column-1);
-		tmp6 = array[0] &= 1L << (current_column+1);
-		tmp7 = array[0] &= 1L << (current_column);
-		tmp8 = array[0] &= 1L << (current_column-1);
+		tmp1 = array[current_row];
+		tmp1 = tmp1 &= 1L << (current_column +1);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row-1];
+		tmp2 = tmp2 &= 1L << (current_column+1);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row-1];
+		tmp3 = tmp3 &= 1L << (current_column);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[current_row-1];
+		tmp4 = tmp4 &= 1L << (current_column-1);
+		tmp4 = return_bit(tmp4);
+
+		tmp5 = array[current_row];
+		tmp5 = tmp5 &= 1L << (current_column-1);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[0];
+		tmp6 = tmp6 &= 1L << (current_column+1);
+		tmp6 = return_bit(tmp6);
+
+		tmp7 = array[0];
+		tmp7 = tmp7 &= 1L << (current_column);
+		tmp7 = return_bit(tmp7);
+
+		tmp8 = array[0];
+		tmp8 = tmp8 &= 1L << (current_column-1);
+		tmp8 = return_bit(tmp8);
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
 	//Right edge
 	if(current_column == 0)
 	{
-		tmp1 = array[current_row+1] &= 1L << (current_column);
-		tmp2 = array[current_row+1] &= 1L << (current_column+1);
-		tmp3 = array[current_row] &= 1L << (current_column+1);
-		tmp4 = array[current_row-1] &= 1L << (current_column+1);
-		tmp5 = array[current_row-1] &= 1L << (current_column);
-		tmp6 = array[current_row+1] &= 1L << (NUMCOLUMNS-1);
-		tmp7 = array[current_row] &= 1L << (NUMCOLUMNS-1);
-		tmp8 = array[current_row-1] &= 1L << (NUMCOLUMNS-1);
+		tmp1 = array[current_row+1];
+		tmp1 = tmp1 &= 1L << (current_column);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row+1];
+		tmp2 = tmp2 &= 1L << (current_column+1);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row];
+		tmp3 = tmp3 &= 1L << (current_column+1);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[current_row-1];
+		tmp4 = tmp4 &= 1L << (current_column+1);
+		tmp4 = return_bit(tmp4);
+
+		tmp5 = array[current_row-1];
+		tmp5 = tmp5 &= 1L << (current_column);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[current_row+1];
+		tmp6 = tmp6 &= 1L << (NUMCOLUMNS-1);
+		tmp6 = return_bit(tmp6);
+
+		tmp7 = array[current_row];
+		tmp7 = tmp7 &= 1L << (NUMCOLUMNS-1);
+		tmp7 = return_bit(tmp7);
+
+		tmp8 = array[current_row-1];
+		tmp8 = tmp8 &= 1L << (NUMCOLUMNS-1);
+		tmp8 = return_bit(tmp8);
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
 	//Left edge
 	if(current_column == NUMCOLUMNS-1)
 	{
-		tmp1 = array[current_row+1] &= 1L << (current_column);
-		tmp2 = array[current_row+1] &= 1L << (current_column-1);
-		tmp3 = array[current_row] &= 1L << (current_column-1);
-		tmp4 = array[current_row-1] &= 1L << (current_column-1);
-		tmp5 = array[current_row-1] &= 1L << (current_column);
-		tmp6 = array[current_row+1] &= 1L << (0);
-		tmp7 = array[current_row] &= 1L << (0);
-		tmp8 = array[current_row-1] &= 1L << (0);
+		tmp1 = array[current_row+1];
+		tmp1 = tmp1 &= 1L << (current_column);
+		tmp1 = return_bit(tmp1);
+
+		tmp2 = array[current_row+1];
+		tmp2 = tmp2 &= 1L << (current_column-1);
+		tmp2 = return_bit(tmp2);
+
+		tmp3 = array[current_row];
+		tmp3 = tmp3 &= 1L << (current_column-1);
+		tmp3 = return_bit(tmp3);
+
+		tmp4 = array[current_row-1];
+		tmp4 = tmp4 &= 1L << (current_column-1);
+		tmp4 = return_bit(tmp4);
+
+		tmp5 = array[current_row-1];
+		tmp5 = tmp5 &= 1L << (current_column);
+		tmp5 = return_bit(tmp5);
+
+		tmp6 = array[current_row+1];
+		tmp6 = tmp6 &= 1L << (0);
+		tmp6 = return_bit(tmp6);
+
+		tmp7 = array[current_row];
+		tmp7 = tmp7 &= 1L << (0);
+		tmp7 = return_bit(tmp7);
+
+		tmp8 = array[current_row-1];
+		tmp8 = tmp8 &= 1L << (0);
+		tmp8 = return_bit(tmp8);
+
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 				return num_of_neighbors;
 	}
 
 	// Fall through to base case in center of Board...
-	tmp1 = array[current_row+1] &= 1L << (current_column +1);
-	tmp2 = array[current_row+1] &= 1L << (current_column);
-	tmp3 = array[current_row+1] &= 1L << (current_column-1);
-	tmp4 = array[current_row] &= 1L << (current_column-1);
-	tmp5 = array[current_row-1] &= 1L << (current_column-1);
-	tmp6 = array[current_row-1] &= 1L << (current_column);
-	tmp7 = array[current_row-1] &= 1L << (current_column+1);
-	tmp8 = array[current_row] &= 1L << (current_column+1);
+	tmp1 = array[current_row+1];
+	tmp1 = tmp1 &= 1L << (current_column +1);
+	tmp1 = return_bit(tmp1);
+
+	tmp2 = array[current_row+1];
+	tmp2 = tmp2 &= 1L << (current_column);
+	tmp2 = return_bit(tmp2);
+
+	tmp3 = array[current_row+1];
+	tmp3 = tmp3 &= 1L << (current_column-1);
+	tmp3 = return_bit(tmp3);
+
+	tmp4 = array[current_row];
+	tmp4 = tmp4 &= 1L << (current_column-1);
+	tmp4 = return_bit(tmp4);
+
+	tmp5 = array[current_row-1];
+	tmp5 = tmp5 &= 1L << (current_column-1);
+	tmp5 = return_bit(tmp5);
+
+	tmp6 = array[current_row-1];
+	tmp6 = tmp6 &= 1L << (current_column);
+	tmp6 = return_bit(tmp6);
+
+	tmp7 = array[current_row-1];
+	tmp7 = tmp7 &= 1L << (current_column+1);
+	tmp7 = return_bit(tmp7);
+
+	tmp8 = array[current_row];
+	tmp8 = tmp8 &= 1L << (current_column+1);
+	tmp8 = return_bit(tmp8);
+
 	num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 		return num_of_neighbors;
 }
 
 void life()
 {
+	volatile unsigned long int test;
 	uint16_t num_neighbors;
-	uint8_t x, y;
+	volatile unsigned long int x, y;
 
 	if (reset_game_flag == 1)
 		{
@@ -307,20 +504,22 @@ void life()
 			{
 				num_neighbors = calc_neighbors(x,y);
 
+
+				test = array[x];
 				// Current array live cell cases-----------------------------------
-				if ( (array[y] &= 1 << x) == 1)
+				if ( (test &= 1L << y) != 0)
 				{
 					if(num_neighbors < 2)
 					{
-						nextarray[y] &= ~(1 << x);				// Sets nextarray bit to dead state
+						nextarray[x] &= ~(1L << y);				// Sets nextarray bit to dead state
 					}
 					if(num_neighbors == 2 || num_neighbors == 3)
 					{
-						nextarray[y] |= (1 << x);				// Sets nextarray bit to live state
+						nextarray[x] |= (1L << y);				// Sets nextarray bit to live state
 					}
 					if(num_neighbors > 3)
 					{
-						nextarray[y] &= ~(1 << x);				// Sets nextarray bit to dead state
+						nextarray[x] &= ~(1L << y);				// Sets nextarray bit to dead state
 					}
 				}
 				// Current array dead cell cases-----------------------------------
@@ -328,14 +527,14 @@ void life()
 				{
 					if(num_neighbors == 3)
 					{
-						nextarray[y] |= (1 << x);				// Sets nextarray bit to live state
+						nextarray[x] |= (1L << y);				// Sets nextarray bit to live state
 					}
 				}
 			}
 		}
 
 		// Restarts if the array is frozen
-	/*	if (memcmp(array, nextarray, sizeof (array)) == 0)		// Uses memcmp to determine if the arrays are stuck in identical state
+/*		if (memcmp(array, nextarray, sizeof (array)) == 0)		// Uses memcmp to determine if the arrays are stuck in identical state
 		{														// to reset game
 			reset_game_flag = 1;
 		}
@@ -350,30 +549,12 @@ void update_array()
 	life();
 }
 
-int power(num, exponent)
-{
-	if (exponent == 0)
-	{return 1;}
-	if (exponent == 1)
-	{return num;}
-
-	int ans;
-	ans = num;
-
-	do{
-	ans = ans*num;
-	exponent--;
-	}
-	while(exponent > 1);
-	return ans;
-}
-
 // Timer A0 interrupt service routine
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A (void)
 {
 	one_sec_flag++;
-		if(one_sec_flag >= 3200)
+		if(one_sec_flag >= 500)
 		{
 			one_sec_flag = 0;
 			swap_array();
