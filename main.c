@@ -1,4 +1,3 @@
-//#include <msp430.h>
 #include "msp430g2533.h"
 #include "stdint.h"
 #include "main_functions.h"

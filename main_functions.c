@@ -41,18 +41,31 @@ volatile uint32_t nextarray[NUMROWS +1] =
 		0x00000000, 0x00000000, 0x00000000, 0x00000000
 
 };
+/*
+volatile uint32_t array_nminus2[NUMROWS +1] =
+{
+		0x00000000, 0x00000000, 0x00000000, 0x00000000,
+		0x00000000, 0x00000000, 0x00000000, 0x00000000,
+		0x00000000, 0x00000000, 0x00000000, 0x00000000,
+		0x00000000, 0x00000000, 0x00000000, 0x00000000
+
+};*/
 
 void setup()
 {
-	// Setup DCO Freq...used as input to timers A and B
+	// Setup DCO Freq...used as input to timers A
 	WDTCTL = WDTPW + WDTHOLD;                 				// Stop WDT
 	BCSCTL1 |= 15;											// SET RSELx to15
-	DCOCTL |= BIT5 + BIT6 + BIT7;									// SET DCOx to 7...should set DCO ~16Mhz--26MHz...no oscilloscope. :(
+	DCOCTL |= BIT5 + BIT6 + BIT7;							// SET DCOx to 7...should set DCO ~16Mhz--26MHz...no oscilloscope. :(
 
-	// Timer A setup count up compare interrupts @ high speed for write data to array
-	TACCTL0 = CCIE;                             			// Timer A CCR0 interrupt enabled
-	TACTL = TASSEL_2 + MC_1 + ID_0;           				// SMCLK no division, upmode
-	TACCR0 =  5000;                            				// Assuming DCO is running at 16MHz, throws interrupt every 312uS, approx 3000Hz, 16 rows to display update at < 180Hz
+	// Timer A0 setup count up compare interrupts @ high speed for write data to array from DCO
+	TA0CCTL0 = CCIE;                             			// Timer A0 CCR0 interrupt enabled
+	TA0CTL = TASSEL_2 + MC_1 + ID_0;           				// SMCLK no division, upmode
+	TA0CCR0 =  5000;                            				// Assuming DCO is running at 16MHz, throws interrupt every 312uS, approx 3000Hz, 16 rows to display update at < 180Hz
+
+	TA1CCTL0 = CCIE;
+	TA1CTL = TASSEL_1 + ID_3 + MC_1;						// TA1 on ACLK, Div by 8, upmode
+	TA1CCR0 = 4096;											// 32768/8 = 4096 Throws interrupt @ 1Hz
 
 	P1SEL = BIT2 + BIT4;
 	P1SEL2 = BIT2 + BIT4;
@@ -81,7 +94,9 @@ void swap_array()
 {
 	if(swap_array_flag)
 	{
-		memcpy(&array, &nextarray, sizeof(array));		// Swaps nextarray with array
+		//memcpy(&nextarray, &array_nminus2, sizeof(array_nminus2));		// Swaps nextarray with nminus2
+		memcpy(&array, &nextarray, sizeof(array));						// Swaps nextarray with array
+
 		swap_array_flag = 0;
 	}
 
@@ -533,12 +548,13 @@ void life()
 			}
 		}
 
-		// Restarts if the array is frozen
-/*		if (memcmp(array, nextarray, sizeof (array)) == 0)		// Uses memcmp to determine if the arrays are stuck in identical state
+		// Restarts if the array is frozen or has still life with period 2
+		if ( memcmp(&array, &nextarray, sizeof (array)) == 0 )		// Uses memcmp to determine if the arrays are stuck in identical state
 		{														// to reset game
 			reset_game_flag = 1;
 		}
-*/
+
+
 		swap_array_flag = 1; 									// Sets swap array flag to allow array to change at next 1sec interval
 
 
@@ -551,7 +567,7 @@ void update_array()
 
 // Timer A0 interrupt service routine
 #pragma vector=TIMER0_A0_VECTOR
-__interrupt void Timer_A (void)
+__interrupt void Timer_A0 (void)
 {
 	one_sec_flag++;
 		if(one_sec_flag >= 500)
@@ -624,3 +640,10 @@ __interrupt void Timer_A (void)
 }
 
 
+// Timer A0 interrupt service routine
+#pragma vector=TIMER1_A0_VECTOR
+__interrupt void Timer_A1 (void)
+{
+
+	//array[5] = 0xffffffff;
+}
