@@ -17,6 +17,7 @@
 volatile int one_sec_flag = 0;
 volatile int swap_array_flag = 0;
 volatile uint8_t reset_game_flag = 0;
+volatile uint16_t count = 0;
 volatile uint8_t row = 0;
 
 volatile uint8_t lowbyte = 0x00;
@@ -89,6 +90,70 @@ void rowselect(int curr_row)
 	P2OUT = curr_row;
 }
 
+void update_array()
+{
+	uint8_t i;
+		volatile unsigned long tmp1;
+
+		lowbyte = 0xFF;
+		medlowbyte = 0xFF;
+		medhighbyte = 0xFF;
+		highbyte = 0xFF;
+
+		// This for loop extracts the lowbytes...note that i is an int, numcolumns = 31, numcolumns/2 = 15 (int truncates to 15)
+		for(i=0; i<4; i++)
+		{
+			tmp1 =  array[row];		// Bitwise and shift by i columns to extract bit from array in tmp
+
+			switch(i)
+			{
+			case(0):
+					lowbyte = lowbyte &= tmp1;
+					break;
+			case(1):
+					tmp1 = tmp1 >> 8;
+					medlowbyte = medlowbyte &= tmp1;
+					break;
+			case(2):
+					tmp1 = tmp1 >> 16;
+					medhighbyte = medhighbyte &= tmp1;
+					break;
+			case(3):
+					tmp1 = tmp1 >> 24;
+					highbyte = highbyte &= tmp1;
+					break;
+			}
+		}
+
+		// Now we select row and display data...
+
+		P2OUT |= BIT5;								// sets output enable high to stop display of line when changing data
+
+		UCA0TXBUF = lowbyte;
+		while (!(IFG2 & UCA0TXIFG));						// Sends data out to STDP05 LED Drivers...
+
+		UCA0TXBUF = medlowbyte;
+		while (!(IFG2 & UCA0TXIFG));
+
+		UCA0TXBUF = medhighbyte;
+		while (!(IFG2 & UCA0TXIFG));
+
+		UCA0TXBUF = highbyte;
+		while (!(IFG2 & UCA0TXIFG));
+
+
+		 rowselect(row);
+		 if(row < NUMROWS)
+		 	{row++;}
+		 else
+		 	{row = 0;}
+
+		 P2OUT |= BIT0;								// Pulses pin P2.0 TO latch in data to stp08dp05
+		 P2OUT &= ~BIT0;
+
+		 P2OUT &= ~BIT5;							// Resets Bit5 low to turn line back on
+}
+
 
 void swap_array()
 {
@@ -105,6 +170,10 @@ void swap_array()
 
 void seed_array()
 {
+	uint8_t i;
+	for(i=0; i<=NUMROWS; i++)
+	{nextarray[i] = 0x00000000;}					// Clears nextarray
+
 	srand(TA0R);									// Seeds random numbers from Timer 0.
 	volatile long int x, y;								// y variable represents current column, x-->row
 	for (y = 0; y <= NUMCOLUMNS; y++)			// Creates the random initial state of the array with 1s and 0s.
@@ -126,7 +195,30 @@ void seed_array()
 
 void reset_game()
 {
-	_delay_cycles(8000000);
+	P2OUT |= BIT5;								// Sets bit5 to clear array
+	uint8_t i;
+
+	for(i=0; i<=NUMROWS; i++)
+	{
+		array[i] = 0x00000000;
+		nextarray[i] = 0x00000000;
+		//update_array();
+	}
+
+	//_delay_cycles(3000000);
+	row = 0;
+
+	//P2OUT &= ~BIT5								// Resets bit5 to turn array back on
+	for(i=0; i<=NUMROWS; i++)
+	{
+		array[i] = 0xFFFFFFFF;
+		update_array();
+		if(i == 0 || i == 1)						// For some reason is not displaying rows 0 or 1...
+		{_delay_cycles(50000);}
+		_delay_cycles(500000);
+	}
+	_delay_cycles(500000);
+
 	seed_array();
 	reset_game_flag = 0;
 }
@@ -155,11 +247,11 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 		tmp1 = return_bit(tmp1);
 
 		tmp2 = array[current_row];
-		tmp2 = tmp2 &= 1L << (NUMCOLUMNS-1);
+		tmp2 = tmp2 &= 1L << (NUMCOLUMNS);
 		tmp2 = return_bit(tmp2);
 
 		tmp3 = array[current_row+1];
-		tmp3 = tmp3 &= 1L << (NUMCOLUMNS-1);
+		tmp3 = tmp3 &= 1L << (NUMCOLUMNS);
 		tmp3 = return_bit(tmp3);
 
 		tmp4 = array[current_row+1];
@@ -170,16 +262,16 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 		tmp5 = tmp5 &= 1L << (current_column);
 		tmp5 = return_bit(tmp5);
 
-		tmp6 = array[NUMROWS-1];
+		tmp6 = array[NUMROWS];
 		tmp6 = tmp6 &= 1L << (current_column);
 		tmp6 = return_bit(tmp6);
 
-		tmp7 = array[NUMROWS-1];
+		tmp7 = array[NUMROWS];
 		tmp7 = tmp7 &= 1L << (current_column+1);
 		tmp7 = return_bit(tmp7);
 
-		tmp8 = array[NUMROWS-1];
-		tmp8 = tmp8 &= 1L << (NUMCOLUMNS-1);
+		tmp8 = array[NUMROWS];
+		tmp8 = tmp8 &= 1L << (NUMCOLUMNS);
 		tmp8 = return_bit(tmp8);
 
 
@@ -187,7 +279,7 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 			return num_of_neighbors;
 	}
 	// Lower Left
-	if(current_row == 0 && current_column == NUMCOLUMNS-1)
+	if(current_row == 0 && current_column == NUMCOLUMNS)
 	{
 		tmp1 = array[current_row];
 		tmp1 = tmp1 &= 1L << (current_column -1);
@@ -210,17 +302,17 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 		tmp5 = tmp5 &= 1L << (0);
 		tmp5 = return_bit(tmp5);
 
-		tmp6 = array[NUMROWS-1];
+		tmp6 = array[NUMROWS];
 		tmp6 = tmp6 &= 1L << (current_column);
 		tmp6 = return_bit(tmp6);
 
 
-		tmp7 = array[NUMROWS-1];
+		tmp7 = array[NUMROWS];
 		tmp7 = tmp7 &= 1L << (current_column-1);
 		tmp7 = return_bit(tmp7);
 
 
-		tmp8 = array[NUMROWS-1];
+		tmp8 = array[NUMROWS];
 		tmp8 = tmp8 &= 1L << (0);
 		tmp8 = return_bit(tmp8);
 
@@ -229,7 +321,7 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 			return num_of_neighbors;
 	}
 	//upper right
-	if(current_row == NUMROWS-1 && current_column == 0)
+	if(current_row == NUMROWS && current_column == 0)
 	{
 		tmp1 = array[current_row];
 		tmp1 = tmp1 &= 1L << (current_column +1);
@@ -244,11 +336,11 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 		tmp3 = return_bit(tmp3);
 
 		tmp4 = array[current_row];
-		tmp4 = tmp4 &= 1L << (NUMCOLUMNS-1);
+		tmp4 = tmp4 &= 1L << (NUMCOLUMNS);
 		tmp4 = return_bit(tmp4);
 
 		tmp5 = array[current_row-1];
-		tmp5 = tmp5 &= 1L << (NUMCOLUMNS-1);
+		tmp5 = tmp5 &= 1L << (NUMCOLUMNS);
 		tmp5 = return_bit(tmp5);
 
 		tmp6 = array[0];
@@ -260,14 +352,14 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 		tmp7 = return_bit(tmp7);
 
 		tmp8 = array[0];
-		tmp8 = tmp8 &= 1L << (NUMCOLUMNS-1);
+		tmp8 = tmp8 &= 1L << (NUMCOLUMNS);
 		tmp8 = return_bit(tmp8);
 
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
 	//upper left
-	if(current_row == NUMROWS-1 && current_column == NUMCOLUMNS-1)
+	if(current_row == NUMROWS && current_column == NUMCOLUMNS)
 	{
 		tmp1 = array[current_row];
 		tmp1 = tmp1 &= 1L << (current_column -1);
@@ -329,15 +421,15 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 		tmp5 = tmp5 &= 1L << (current_column-1);
 		tmp5 = return_bit(tmp5);
 
-		tmp6 = array[NUMROWS-1];
+		tmp6 = array[NUMROWS];
 		tmp6 = tmp6 &= 1L << (current_column+1);
 		tmp6 = return_bit(tmp6);
 
-		tmp7 = array[NUMROWS-1];
+		tmp7 = array[NUMROWS];
 		tmp7 = tmp7 &= 1L << (current_column);
 		tmp7 = return_bit(tmp7);
 
-		tmp8 = array[NUMROWS-1];
+		tmp8 = array[NUMROWS];
 		tmp8 = tmp8 &= 1L << (current_column-1);
 		tmp8 = return_bit(tmp8);
 
@@ -345,7 +437,7 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 			return num_of_neighbors;
 	}
 	//Top edge
-	if(current_row == NUMROWS-1)
+	if(current_row == NUMROWS)
 	{
 		tmp1 = array[current_row];
 		tmp1 = tmp1 &= 1L << (current_column +1);
@@ -406,22 +498,22 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 		tmp5 = return_bit(tmp5);
 
 		tmp6 = array[current_row+1];
-		tmp6 = tmp6 &= 1L << (NUMCOLUMNS-1);
+		tmp6 = tmp6 &= 1L << (NUMCOLUMNS);
 		tmp6 = return_bit(tmp6);
 
 		tmp7 = array[current_row];
-		tmp7 = tmp7 &= 1L << (NUMCOLUMNS-1);
+		tmp7 = tmp7 &= 1L << (NUMCOLUMNS);
 		tmp7 = return_bit(tmp7);
 
 		tmp8 = array[current_row-1];
-		tmp8 = tmp8 &= 1L << (NUMCOLUMNS-1);
+		tmp8 = tmp8 &= 1L << (NUMCOLUMNS);
 		tmp8 = return_bit(tmp8);
 
 		num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 			return num_of_neighbors;
 	}
 	//Left edge
-	if(current_column == NUMCOLUMNS-1)
+	if(current_column == NUMCOLUMNS)
 	{
 		tmp1 = array[current_row+1];
 		tmp1 = tmp1 &= 1L << (current_column);
@@ -560,10 +652,6 @@ void life()
 
 }
 
-void update_array()
-{
-	life();
-}
 
 // Timer A0 interrupt service routine
 #pragma vector=TIMER0_A0_VECTOR
@@ -576,67 +664,9 @@ __interrupt void Timer_A0 (void)
 			swap_array();
 		}
 
-
-	uint8_t i;
-	volatile unsigned long tmp1;
-
-	lowbyte = 0xFF;
-	medlowbyte = 0xFF;
-	medhighbyte = 0xFF;
-	highbyte = 0xFF;
-
-	// This for loop extracts the lowbytes...note that i is an int, numcolumns = 31, numcolumns/2 = 15 (int truncates to 15)
-	for(i=0; i<4; i++)
-	{
-		tmp1 =  array[row];		// Bitwise and shift by i columns to extract bit from array in tmp
-
-		switch(i)
-		{
-		case(0):
-				lowbyte = lowbyte &= tmp1;
-				break;
-		case(1):
-				tmp1 = tmp1 >> 8;
-				medlowbyte = medlowbyte &= tmp1;
-				break;
-		case(2):
-				tmp1 = tmp1 >> 16;
-				medhighbyte = medhighbyte &= tmp1;
-				break;
-		case(3):
-				tmp1 = tmp1 >> 24;
-				highbyte = highbyte &= tmp1;
-				break;
-		}
-	}
-
-	// Now we select row and display data...
-
-	P2OUT |= BIT5;								// sets output enable high to stop display of line when changing data
-
-	UCA0TXBUF = lowbyte;
-	while (!(IFG2 & UCA0TXIFG));						// Sends data out to STDP05 LED Drivers...
-
-	UCA0TXBUF = medlowbyte;
-	while (!(IFG2 & UCA0TXIFG));
-
-	UCA0TXBUF = medhighbyte;
-	while (!(IFG2 & UCA0TXIFG));
-
-	UCA0TXBUF = highbyte;
-	while (!(IFG2 & UCA0TXIFG));
+		update_array();
 
 
-	 rowselect(row);
-	 if(row <= NUMROWS)
-	 	{row++;}
-	 else
-	 	{row = 0;}
-
-	 P2OUT |= BIT0;								// Pulses pin P2.0 TO latch in data to stp08dp05
-	 P2OUT &= ~BIT0;
-
-	 P2OUT &= ~BIT5;							// Resets Bit5 low to turn line back on
 }
 
 
@@ -644,6 +674,12 @@ __interrupt void Timer_A0 (void)
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void Timer_A1 (void)
 {
+	count++;
 
-	//array[5] = 0xffffffff;
+	if(count == 60)
+	{
+		count = 0;
+		reset_game();
+	}
+
 }

@@ -11,6 +11,7 @@ void main(void)
 	for(;;)
 	{
 		life();
+
 	}
 
   }
