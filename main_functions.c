@@ -24,6 +24,14 @@ volatile uint8_t lowbyte = 0x00;
 volatile uint8_t medlowbyte = 0x00;
 volatile uint8_t medhighbyte = 0x00;
 volatile uint8_t highbyte = 0x00;
+volatile uint8_t testbit = 0;
+volatile uint8_t am_pm = 0;							// Set to 0 for am, pm = 1
+volatile uint8_t num = 0;							// This is a variable for testing array
+
+volatile uint8_t tens_hrs = 0;
+volatile uint8_t ones_hrs = 0;
+volatile uint8_t tens_mins = 0;
+volatile uint8_t ones_mins = 0;
 
 volatile uint32_t array[NUMROWS +1] =
 {
@@ -42,21 +50,60 @@ volatile uint32_t nextarray[NUMROWS +1] =
 		0x00000000, 0x00000000, 0x00000000, 0x00000000
 
 };
-/*
-volatile uint32_t array_nminus2[NUMROWS +1] =
-{
-		0x00000000, 0x00000000, 0x00000000, 0x00000000,
-		0x00000000, 0x00000000, 0x00000000, 0x00000000,
-		0x00000000, 0x00000000, 0x00000000, 0x00000000,
-		0x00000000, 0x00000000, 0x00000000, 0x00000000
 
-};*/
+// These are the numbers which will be displayed to the screen during clock mode.
+// Hex values...each digit 12 pixels high, 5 pixels wide.  Store each row as a byte.
+uint8_t zero[12] =
+{
+		0x0e, 0x11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X0e
+};
+uint8_t one[12] =
+{
+		0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01
+};
+uint8_t two[12] =
+{
+		0X1f, 0X10, 0X10, 0X10, 0X08, 0X04, 0X02, 0X01, 0X01, 0X11, 0x11, 0x0E
+};
+uint8_t three[12] =
+{
+		0x0E, 0x11, 0X11, 0X01, 0X01, 0X01, 0X06, 0X01, 0X01, 0X11, 0X11, 0X0E
+};
+uint8_t four[12] =
+{
+		0x01, 0x01, 0X01, 0X01, 0X01, 0X01, 0X1f, 0X11, 0X11, 0X11, 0X11, 0X01
+};
+uint8_t five[12] =
+{
+		0x0e, 0x11, 0X11, 0X01, 0X01, 0X01, 0X01, 0X1e, 0X10, 0X10, 0X10, 0X1f
+};
+uint8_t six[12] =
+{
+		0x0e, 0x11, 0X11, 0X11, 0X11, 0X1e, 0X10, 0X10, 0X10, 0X10, 0X10, 0X0e
+};
+uint8_t seven[12] =
+{
+		0x04, 0x04, 0X04, 0X04, 0X02, 0X02, 0X02, 0X01, 0X01, 0X01, 0X01, 0X1f
+};
+uint8_t eight[12] =
+{
+		0x0e, 0x11, 0X11, 0X11, 0X11, 0X11, 0X0e, 0X11, 0X11, 0X11, 0X11, 0X0e
+};
+uint8_t nine[12] =
+{
+		0x0e, 0x11, 0X01, 0X01, 0X01, 0X01, 0X0f, 0X11, 0X11, 0X11, 0X11, 0X0e
+};
+uint8_t am[12] =
+{
+		0x0e, 0x11, 0X01, 0X01, 0X01, 0X01, 0X0f, 0X11, 0X11, 0X11, 0X11, 0X0e
+};
 
 void setup()
 {
 	// Setup DCO Freq...used as input to timers A
 	WDTCTL = WDTPW + WDTHOLD;                 				// Stop WDT
-	BCSCTL1 |= 15;											// SET RSELx to15
+	BCSCTL1 |= DIVA_3 + 15;									// SET RSELx to15, Divide ACLK by 3
+	BCSCTL3 |= XCAP_2;
 	DCOCTL |= BIT5 + BIT6 + BIT7;							// SET DCOx to 7...should set DCO ~16Mhz--26MHz...no oscilloscope. :(
 
 	// Timer A0 setup count up compare interrupts @ high speed for write data to array from DCO
@@ -66,7 +113,7 @@ void setup()
 
 	TA1CCTL0 = CCIE;
 	TA1CTL = TASSEL_1 + ID_3 + MC_1;						// TA1 on ACLK, Div by 8, upmode
-	TA1CCR0 = 4096;											// 32768/8 = 4096 Throws interrupt @ 1Hz
+	TA1CCR0 = 511;											// 32768/64 = 511 Throws interrupt @ 1Hz
 
 	P1SEL = BIT2 + BIT4;
 	P1SEL2 = BIT2 + BIT4;
@@ -205,7 +252,7 @@ void reset_game()
 		//update_array();
 	}
 
-	//_delay_cycles(3000000);
+	_delay_cycles(3000000);
 	row = 0;
 
 	//P2OUT &= ~BIT5								// Resets bit5 to turn array back on
@@ -213,8 +260,6 @@ void reset_game()
 	{
 		array[i] = 0xFFFFFFFF;
 		update_array();
-		if(i == 0 || i == 1)						// For some reason is not displaying rows 0 or 1...
-		{_delay_cycles(50000);}
 		_delay_cycles(500000);
 	}
 	_delay_cycles(500000);
@@ -652,17 +697,87 @@ void life()
 
 }
 
+void clock(uint8_t character)
+{
+	uint8_t i;
+	switch(character)
+	{
+		case(0):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = zero[i];
+			}
+			break;
+		case(1):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = one[i];
+			}
+			break;
+		case(2):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = two[i] << 4;
+			}
+			break;
+		case(3):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = three[i];
+			}
+			break;
+		case(4):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = four[i];
+			}
+			break;
+		case(5):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = five[i];
+			}
+			break;
+		case(6):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = six[i];
+			}
+			break;
+		case(7):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = seven[i];
+			}
+			break;
+		case(8):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = eight[i];
+			}
+			break;
+		case(9):
+			for(i=0; i<12; i++)
+			{
+				array[i+2] = nine[i];
+			}
+			break;
+	}
+
+
+}
+
 
 // Timer A0 interrupt service routine
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A0 (void)
 {
-	one_sec_flag++;
+/*	one_sec_flag++;
 		if(one_sec_flag >= 500)
 		{
 			one_sec_flag = 0;
 			swap_array();
-		}
+		}*/
 
 		update_array();
 
@@ -670,16 +785,22 @@ __interrupt void Timer_A0 (void)
 }
 
 
-// Timer A0 interrupt service routine
+// Timer A0 interrupt service routine.  This implements the clock function of the LED array.
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void Timer_A1 (void)
 {
-	count++;
+/*	count++;
 
-	if(count == 60)
+	if(count >= 60)
 	{
 		count = 0;
 		reset_game();
 	}
+*/
+
+clock(num);
+num++;
+	if(num >= 10)
+		{num = 0;}
 
 }

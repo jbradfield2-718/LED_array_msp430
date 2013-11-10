@@ -6,11 +6,12 @@
 void main(void)
 {
 	setup();
-	seed_array();
+//	seed_array();
 
 	for(;;)
 	{
-		life();
+//		life();
+
 
 	}
 
