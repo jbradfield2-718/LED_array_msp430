@@ -24,14 +24,22 @@ volatile uint8_t lowbyte = 0x00;
 volatile uint8_t medlowbyte = 0x00;
 volatile uint8_t medhighbyte = 0x00;
 volatile uint8_t highbyte = 0x00;
-volatile uint8_t testbit = 0;
+volatile uint8_t colon_blink = 0;
 volatile uint8_t am_pm = 0;							// Set to 0 for am, pm = 1
 volatile uint8_t num = 0;							// This is a variable for testing array
 
-volatile uint8_t tens_hrs = 0;
-volatile uint8_t ones_hrs = 0;
+/* 	Variables to hold the current time.  Clock only works with am/pm system 12 hr format.  To save updating entire array whenever time changes,
+	I hold both the current and last (updated every second) state of the time.  When current digit does not match last state, update_clock function
+	is called to update that porition of the array only. !! CURRENTLY NOT USED !!
+*/
+volatile uint8_t tens_hrs = 1;
+//volatile uint8_t tens_hrs_last = 1;
+volatile uint8_t ones_hrs = 2;
+//volatile uint8_t ones_hrs_last = 2;
 volatile uint8_t tens_mins = 0;
+//volatile uint8_t tens_mins_last = 0;
 volatile uint8_t ones_mins = 0;
+//volatile uint8_t ones_mins_last = 0;
 
 volatile uint32_t array[NUMROWS +1] =
 {
@@ -53,50 +61,59 @@ volatile uint32_t nextarray[NUMROWS +1] =
 
 // These are the numbers which will be displayed to the screen during clock mode.
 // Hex values...each digit 12 pixels high, 5 pixels wide.  Store each row as a byte.
-uint8_t zero[12] =
+const uint8_t zero[12] =
 {
 		0x0e, 0x11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X11, 0X0e
 };
-uint8_t one[12] =
+const uint8_t one[12] =
 {
 		0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01
 };
-uint8_t two[12] =
+const uint8_t two[12] =
 {
 		0X1f, 0X10, 0X10, 0X10, 0X08, 0X04, 0X02, 0X01, 0X01, 0X11, 0x11, 0x0E
 };
-uint8_t three[12] =
+const uint8_t three[12] =
 {
 		0x0E, 0x11, 0X11, 0X01, 0X01, 0X01, 0X06, 0X01, 0X01, 0X11, 0X11, 0X0E
 };
-uint8_t four[12] =
+const uint8_t four[12] =
 {
 		0x01, 0x01, 0X01, 0X01, 0X01, 0X01, 0X1f, 0X11, 0X11, 0X11, 0X11, 0X01
 };
-uint8_t five[12] =
+const uint8_t five[12] =
 {
 		0x0e, 0x11, 0X11, 0X01, 0X01, 0X01, 0X01, 0X1e, 0X10, 0X10, 0X10, 0X1f
 };
-uint8_t six[12] =
+const uint8_t six[12] =
 {
 		0x0e, 0x11, 0X11, 0X11, 0X11, 0X1e, 0X10, 0X10, 0X10, 0X10, 0X10, 0X0e
 };
-uint8_t seven[12] =
+const uint8_t seven[12] =
 {
 		0x04, 0x04, 0X04, 0X04, 0X02, 0X02, 0X02, 0X01, 0X01, 0X01, 0X01, 0X1f
 };
-uint8_t eight[12] =
+const uint8_t eight[12] =
 {
 		0x0e, 0x11, 0X11, 0X11, 0X11, 0X11, 0X0e, 0X11, 0X11, 0X11, 0X11, 0X0e
 };
-uint8_t nine[12] =
+const uint8_t nine[12] =
 {
 		0x0e, 0x11, 0X01, 0X01, 0X01, 0X01, 0X0f, 0X11, 0X11, 0X11, 0X11, 0X0e
 };
-uint8_t am[12] =
+const uint8_t colon[12] =
 {
-		0x0e, 0x11, 0X01, 0X01, 0X01, 0X01, 0X0f, 0X11, 0X11, 0X11, 0X11, 0X0e
+		0x00, 0x00, 0X00, 0X03, 0X03, 0X00, 0X00, 0X00, 0X03, 0X03, 0X00, 0X00
 };
+const uint8_t am[12] =
+{
+		0x15, 0x15, 0X15, 0X1b, 0X11, 0X00, 0X11, 0X11, 0X1f, 0X11, 0X0a, 0X04
+};
+const uint8_t pm[12] =
+{
+		0x15, 0x15, 0X15, 0X1b, 0X11, 0X00, 0X10, 0X10, 0X1c, 0X12, 0X12, 0X1c
+};
+
 
 void setup()
 {
@@ -697,9 +714,136 @@ void life()
 
 }
 
-void clock(uint8_t character)
+//======================================================================================================================================================
+/*	Update clock function updates the array to hold the proper pattern for the current time.  Pass in digit to determine which portion of array
+ * 	to be currently updated by function.  digit == 0, ones_mins.  digit == 1, tens_mins.  digit == 2, ones_hours.  digit == 3, tens_hours.
+ */
+//======================================================================================================================================================
+void update_clock(uint8_t digit)
 {
-	uint8_t i;
+	uint8_t i, shift = 8, num = ones_mins;
+	uint32_t tmp;
+
+	if(digit == 3)
+	{
+		shift = 29;
+		num = tens_hrs;
+	}
+	else if(digit == 2)
+	{
+		shift = 23;
+		num = ones_hrs;
+	}
+	else if(digit == 1)
+	{
+		shift = 14;
+		num = tens_mins;
+	}
+
+	/*	We want to now update entire array with the correct time...get individual time characters and load them to the array line by line in for loop */
+	switch(num)
+	{
+		case(0):
+			if(digit == 3)
+			{
+				for(i=2; i<14; i++)
+				{
+					tmp = 0x00000000;
+					tmp = tmp << shift;
+					array[i] |= tmp;				// So that we don't see the zero in front of the one prior to 10 o'clock
+				}
+				break;
+			}
+			for(i=2; i<14; i++)
+			{
+				tmp = zero[i-2];
+				tmp = tmp << shift;
+				array[i] |= tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(1):
+			for(i=2; i<14; i++)
+			{
+				tmp = one[i-2];
+				tmp = tmp << shift;
+				array[i] |= tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(2):
+			for(i=2; i<14; i++)
+			{
+				tmp = two[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(3):
+			for(i=2; i<14; i++)
+			{
+				tmp = three[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(4):
+			for(i=2; i<14; i++)
+			{
+				tmp = four[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(5):
+			for(i=2; i<14; i++)
+			{
+				tmp = five[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(6):
+			for(i=2; i<14; i++)
+			{
+				tmp = six[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(7):
+			for(i=2; i<14; i++)
+			{
+				tmp = seven[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(8):
+			for(i=2; i<14; i++)
+			{
+				tmp = eight[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+
+		case(9):
+			for(i=2; i<14; i++)
+			{
+				tmp = nine[i-2];
+				tmp = tmp << shift;
+				array[i] |=  tmp;				// Remember that numeric array is smaller than size of array...may cause bug...numeric array 8bits wide; we're ORing a section smaller than this
+			}
+			break;
+	}
+/*
 	switch(character)
 	{
 		case(0):
@@ -763,10 +907,52 @@ void clock(uint8_t character)
 			}
 			break;
 	}
-
+*/
 
 }
+void update_time()
+{
+// Catches case of 59 min rollover to next hour.
+	if(ones_mins == 9 && tens_mins == 5)
+	{
+		ones_mins = 0;
+		tens_mins = 0;
 
+		// Case of 12th hr rollover to 1
+		if (tens_hrs == 1 && ones_hrs == 2 )
+		{
+			tens_hrs = 0;
+			ones_hrs = 1;
+			return;
+		}
+		if (tens_hrs == 1 && ones_hrs == 1)
+		{
+			am_pm ^= 1;
+			ones_hrs++;
+			return;
+		}								// Toggles from am to pm
+		if (ones_hrs == 9)
+		{
+			tens_hrs = 1;
+			ones_hrs = 0;
+			return;
+		}
+
+		ones_hrs++;
+	}
+
+	else if(ones_mins == 9)
+	{
+		ones_mins = 0;
+		tens_mins++;
+	}
+
+	else				// Falls through to just increment minutes by 1
+	{
+		ones_mins++;
+		return;
+	}
+}
 
 // Timer A0 interrupt service routine
 #pragma vector=TIMER0_A0_VECTOR
@@ -797,10 +983,59 @@ __interrupt void Timer_A1 (void)
 		reset_game();
 	}
 */
+	count++;
+	colon_blink ^= 1;							// Toggles so we get colon to blink at 2 Hz
 
-clock(num);
+/*	if(count >= 60)
+		{
+			count = 0;
+			update_time();
+		}
+*/
+	update_time();
+
+	/*
+update_clock(num);
 num++;
 	if(num >= 10)
-		{num = 0;}
+		{num = 0;} */
 
+	uint8_t i;
+	uint32_t tmp;
+	for(i=0; i<16; i++)
+		{
+			array[i] = 0x00000000;		// First, clears array before we update pattern for new time.  We can improve update speed if we only update what we need, but this may be fast enough
+		}
+
+	for(i=0; i<4; i++)
+	{
+		update_clock(i);				// Updates all 4 digits of array.
+	}
+
+	if(colon_blink == 1)
+	{
+		for(i=2; i<14; i++)
+		{
+			tmp = colon[i-2];
+			tmp = tmp << 20;
+			array[i] |=  tmp;			// colonblink outside update_clock so we're not wasting cyles to constantly update this.
+		}
+	}
+
+	if(am_pm == 1)
+	{
+		for(i=2; i<14; i++)
+		{
+			tmp = pm[i-2];
+			tmp = tmp << 2;
+			array[i] |=  tmp;			// colonblink outside update_clock so we're not wasting cyles to constantly update this.
+		}
+	}
+
+	for(i=2; i<14; i++)
+		{
+			tmp = am[i-2];
+			tmp = tmp << 2;
+			array[i] |=  tmp;			// colonblink outside update_clock so we're not wasting cyles to constantly update this.
+		}
 }
