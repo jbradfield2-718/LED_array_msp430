@@ -13,10 +13,15 @@
 #include "string.h"
 #include "math.h"
 
+#define MODE	(P1IN &= 1)							// Gets bit 0 to determine mode
+
 
 volatile int one_sec_flag = 0;
 volatile int swap_array_flag = 0;
+volatile uint8_t start_life_flag = 0;
 volatile uint8_t reset_game_flag = 0;
+volatile uint8_t life_counter = 0;
+volatile uint8_t life_reset = 0;
 volatile uint16_t count = 0;
 volatile uint8_t row = 0;
 
@@ -25,20 +30,20 @@ volatile uint8_t medlowbyte = 0x00;
 volatile uint8_t medhighbyte = 0x00;
 volatile uint8_t highbyte = 0x00;
 volatile uint8_t colon_blink = 0;
-volatile uint8_t am_pm = 0;							// Set to 0 for am, pm = 1
+volatile uint8_t am_pm = 1;							// Set to 0 for am, pm = 1
 volatile uint8_t num = 0;							// This is a variable for testing array
 
 /* 	Variables to hold the current time.  Clock only works with am/pm system 12 hr format.  To save updating entire array whenever time changes,
 	I hold both the current and last (updated every second) state of the time.  When current digit does not match last state, update_clock function
-	is called to update that porition of the array only. !! CURRENTLY NOT USED !!
+	is called to update that portion of the array only. !! CURRENTLY NOT USED !!
 */
 volatile uint8_t tens_hrs = 1;
 //volatile uint8_t tens_hrs_last = 1;
-volatile uint8_t ones_hrs = 2;
+volatile uint8_t ones_hrs = 1;
 //volatile uint8_t ones_hrs_last = 2;
-volatile uint8_t tens_mins = 0;
+volatile uint8_t tens_mins = 4;
 //volatile uint8_t tens_mins_last = 0;
-volatile uint8_t ones_mins = 0;
+volatile uint8_t ones_mins = 4;
 //volatile uint8_t ones_mins_last = 0;
 
 volatile uint32_t array[NUMROWS +1] =
@@ -127,10 +132,15 @@ void setup()
 	TA0CCTL0 = CCIE;                             			// Timer A0 CCR0 interrupt enabled
 	TA0CTL = TASSEL_2 + MC_1 + ID_0;           				// SMCLK no division, upmode
 	TA0CCR0 =  5000;                            				// Assuming DCO is running at 16MHz, throws interrupt every 312uS, approx 3000Hz, 16 rows to display update at < 180Hz
-
+	// Timer A1 setup
 	TA1CCTL0 = CCIE;
 	TA1CTL = TASSEL_1 + ID_3 + MC_1;						// TA1 on ACLK, Div by 8, upmode
 	TA1CCR0 = 511;											// 32768/64 = 511 Throws interrupt @ 1Hz
+	// Port edge interrupts for Port1
+	P1IE |= BIT3 + BIT6 + BIT7;                            	 // P1.3, 1.6, 1.7 interrupt enabled
+	P1IES |= BIT3 + BIT6 + BIT7;                    		// Hi/lo edge
+	P1IFG &= ~BIT3 + BIT6 + BIT7;           					// P1 IFG cleared
+
 
 	P1SEL = BIT2 + BIT4;
 	P1SEL2 = BIT2 + BIT4;
@@ -147,6 +157,7 @@ void setup()
 
 	_BIS_SR(GIE);                   			 // Enter LPM0 w/ interrupt
 }
+
 
 void rowselect(int curr_row)
 {
@@ -266,7 +277,6 @@ void reset_game()
 	{
 		array[i] = 0x00000000;
 		nextarray[i] = 0x00000000;
-		//update_array();
 	}
 
 	_delay_cycles(3000000);
@@ -280,6 +290,13 @@ void reset_game()
 		_delay_cycles(500000);
 	}
 	_delay_cycles(500000);
+
+	if(start_life_flag)
+	{
+		start_life_flag = 0;
+		reset_game_flag = 0;
+		return;
+	}
 
 	seed_array();
 	reset_game_flag = 0;
@@ -649,9 +666,21 @@ uint16_t calc_neighbors(uint8_t current_row, uint8_t current_column)
 	num_of_neighbors = tmp1 + tmp2 + tmp3 + tmp4 + tmp5 + tmp6 + tmp7 + tmp8;
 		return num_of_neighbors;
 }
-
+//==================================================================================================================
+/*	Main routine to call various subroutines to display Conway's Game of Life from input seed.  Can work with
+ * 	seed_array function or input from current time in array function then updates next_array with next value after
+ * 	applying rules to current state of matrix. */
+//==================================================================================================================
 void life()
 {
+	// First checks to see if we are in clock only mode or if user has pused button to get random pattern.
+	// If so, breaks from routine.
+	if(MODE == 0)
+	{
+		if(start_life_flag != 1)
+			{return;}
+	}
+
 	volatile unsigned long int test;
 	uint16_t num_neighbors;
 	volatile unsigned long int x, y;
@@ -843,73 +872,14 @@ void update_clock(uint8_t digit)
 			}
 			break;
 	}
-/*
-	switch(character)
-	{
-		case(0):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = zero[i];
-			}
-			break;
-		case(1):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = one[i];
-			}
-			break;
-		case(2):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = two[i] << 4;
-			}
-			break;
-		case(3):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = three[i];
-			}
-			break;
-		case(4):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = four[i];
-			}
-			break;
-		case(5):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = five[i];
-			}
-			break;
-		case(6):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = six[i];
-			}
-			break;
-		case(7):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = seven[i];
-			}
-			break;
-		case(8):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = eight[i];
-			}
-			break;
-		case(9):
-			for(i=0; i<12; i++)
-			{
-				array[i+2] = nine[i];
-			}
-			break;
-	}
-*/
+
 
 }
+
+//==================================================================================================================
+/*	Subroutine which updates the variables which hold the current time value.  Called from Timer1 ISR when count
+ * 	reaches 60sec to increment minutes/hrs. */
+//==================================================================================================================
 void update_time()
 {
 // Catches case of 59 min rollover to next hour.
@@ -954,16 +924,121 @@ void update_time()
 	}
 }
 
+// Need to continually call this code in certain instances when setting time...implement as function
+void clk_update_macro()
+{
+	uint8_t i;
+	uint32_t tmp;
+	for(i=0; i<16; i++)
+				{
+					array[i] = 0x00000000;		// First, clears array before we update pattern for new time.  We can improve update speed if we only update what we need, but this may be fast enough
+				}
+
+			for(i=0; i<4; i++)
+			{
+				update_clock(i);
+			}
+
+	// adds colon
+			for(i=2; i<14; i++)
+					{
+						tmp = colon[i-2];
+						tmp = tmp << 20;
+						array[i] |=  tmp;			// colonblink outside update_clock so we're not wasting cyles to constantly update this.
+					}
+	// Loads array for AM/PM
+			if(am_pm == 1)
+			{
+				for(i=2; i<14; i++)
+				{
+					tmp = pm[i-2];
+					tmp = tmp << 2;
+					array[i] |=  tmp;
+				}
+			}
+			if(am_pm == 0)
+			{
+				for(i=2; i<14; i++)
+				{
+					tmp = am[i-2];
+					tmp = tmp << 2;
+					array[i] |=  tmp;
+				}
+			}
+}
+
+//==================================================================================================================
+/*	Allows user to manually set time.  Called from ISR on Port 1.6 */
+//==================================================================================================================
+void set_clk_hrs()
+{
+	uint8_t i;
+	if(tens_hrs == 1 && ones_hrs == 1)
+	{
+		ones_hrs++;
+		am_pm ^= 1;
+		clk_update_macro();
+		return;
+	}
+
+	if(tens_hrs == 1 && ones_hrs == 2)
+	{
+		tens_hrs = 0;
+		ones_hrs = 1;
+		clk_update_macro();
+		return;
+	}
+
+	if(ones_hrs == 9 && tens_hrs == 0)
+	{
+		tens_hrs = 1;
+		ones_hrs = 0;
+		clk_update_macro();
+		return;
+	}
+
+	ones_hrs++;
+	clk_update_macro();
+	return;
+}
+
+//==================================================================================================================
+/*	Allows user to manually set time.  Called from ISR on Port 1.7 */
+//==================================================================================================================
+void set_clk_mins()
+{
+	uint8_t i;
+	if(tens_mins == 5 && ones_mins == 9)
+	{
+		ones_mins = 0;
+		tens_mins = 0;
+		clk_update_macro();
+		return;
+	}
+
+	if(ones_mins == 9)
+	{
+		tens_mins++;
+		ones_mins = 0;
+		clk_update_macro();
+		return;
+	}
+
+	ones_mins++;
+	clk_update_macro();
+	return;
+}
+
 // Timer A0 interrupt service routine
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A0 (void)
 {
-/*	one_sec_flag++;
+	one_sec_flag++;
 		if(one_sec_flag >= 500)
 		{
 			one_sec_flag = 0;
 			swap_array();
-		}*/
+		}
 
 		update_array();
 
@@ -975,30 +1050,44 @@ __interrupt void Timer_A0 (void)
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void Timer_A1 (void)
 {
-/*	count++;
-
-	if(count >= 60)
+	if(MODE == 1)
 	{
-		count = 0;
-		reset_game();
-	}
-*/
-	count++;
-	colon_blink ^= 1;							// Toggles so we get colon to blink at 2 Hz
+		life_reset++;						// Allows reset of life pattern after 60 ticks
 
-/*	if(count >= 60)
+		if(life_reset >= 60)
+		{
+			life_reset = 0;
+			reset_game();
+		}
+	}
+
+	count++;							// Count corresponds to clock function
+//	update_time();
+	if(count >= 60)
 		{
 			count = 0;
 			update_time();
 		}
-*/
-	update_time();
 
-	/*
-update_clock(num);
-num++;
-	if(num >= 10)
-		{num = 0;} */
+	if(life_counter == 60)
+		{
+			life_counter = 0;
+			reset_game();
+			start_life_flag = 0;
+		}
+
+	if(start_life_flag)
+	{
+		life_counter++;
+		goto end_Timer1_ISR;
+	}
+
+	if(MODE == 1)
+	{goto end_Timer1_ISR;}
+
+/* Clock Time only portion of ISR */
+	colon_blink ^= 1;							// Toggles so we get colon to blink at 2 Hz
+//	update_time();
 
 	uint8_t i;
 	uint32_t tmp;
@@ -1028,14 +1117,50 @@ num++;
 		{
 			tmp = pm[i-2];
 			tmp = tmp << 2;
-			array[i] |=  tmp;			// colonblink outside update_clock so we're not wasting cyles to constantly update this.
+			array[i] |=  tmp;
 		}
 	}
-
-	for(i=2; i<14; i++)
+	if(am_pm == 0)
+	{
+		for(i=2; i<14; i++)
 		{
 			tmp = am[i-2];
 			tmp = tmp << 2;
-			array[i] |=  tmp;			// colonblink outside update_clock so we're not wasting cyles to constantly update this.
+			array[i] |=  tmp;
 		}
+	}
+
+	end_Timer1_ISR:						// Branch for goto loops for end ISR
+}
+
+#pragma vector=PORT1_VECTOR
+__interrupt void Port_1(void)
+{
+	uint8_t tmp = P1IFG;
+
+	if(tmp &= BIT6)
+	{
+		if(MODE == 0 && start_life_flag != 1)
+		{
+			set_clk_hrs();
+		}
+		P1IFG &= ~BIT6;
+		goto end_Port1_ISR;
+	}
+
+	tmp = P1IFG;
+	if(tmp &= BIT7)
+	{
+		if(MODE == 0 && start_life_flag != 1)
+		{
+			set_clk_mins();
+		}
+		P1IFG &= ~BIT7;
+		goto end_Port1_ISR;
+	}
+
+   start_life_flag = 1;
+   P1IFG &= ~BIT3; 		                   // P1.3 IFG cleared
+
+   end_Port1_ISR:
 }

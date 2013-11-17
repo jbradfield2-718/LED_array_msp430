@@ -2,17 +2,18 @@
 #include "stdint.h"
 #include "main_functions.h"
 
+#define MODE	(P1IN &= 1)							// Gets bit 0 to determine mode
+
 
 void main(void)
 {
 	setup();
-//	seed_array();
+	if(MODE == 1)
+	{seed_array();}
 
 	for(;;)
 	{
-//		life();
-
-
+		life();
 	}
 
   }
